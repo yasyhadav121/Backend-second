@@ -13,7 +13,7 @@ const cors = require('cors');
 
 // CORS Configuration this also gamee
 const corsOptions = {
-  origin: 'http://localhost:5173', // Your exact frontend URL
+  origin: 'https://front-end-tau-vert-99.vercel.app', // Your exact frontend URL
   credentials: true, // CRITICAL: Allow credentials (cookies)
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
