@@ -37,7 +37,7 @@ const register = async (req, res) => {
         const token = jwt.sign(
             { _id: user._id, emailId: user.emailId, role: 'user' },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' }
         );
 
         // Prepare response
@@ -48,12 +48,13 @@ const register = async (req, res) => {
             role: user.role,
         };
 
-        // Set cookie with proper options
+        // Set cookie with proper options for cross-origin
         res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true, // Always true (required for sameSite: 'none')
+            sameSite: 'none', // Required for cross-origin requests
+            path: '/'
         });
 
         res.status(201).json({
@@ -125,15 +126,16 @@ const login = async (req, res) => {
         const token = jwt.sign(
             { _id: user._id, emailId: user.emailId, role: user.role },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' }
         );
 
-        // Set cookie
+        // Set cookie with proper options for cross-origin
         res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true, // Always true (required for sameSite: 'none')
+            sameSite: 'none', // Required for cross-origin requests
+            path: '/'
         });
 
         res.status(200).json({
@@ -149,7 +151,7 @@ const login = async (req, res) => {
     }
 };
 
-// NEW: Verify token endpoint
+// Verify token endpoint
 const verify = async (req, res) => {
     try {
         // Token already verified by middleware (authMiddleware)
@@ -186,27 +188,24 @@ const logout = async (req, res) => {
     try {
         const { token } = req.cookies;
 
-        if (!token) {
-            return res.status(400).json({ 
-                message: "No token found" 
-            });
+        if (token) {
+            // Decode token
+            const payload = jwt.decode(token);
+
+            // Add to Redis blocklist
+            if (redisClient && payload) {
+                await redisClient.set(`token:${token}`, 'Blocked');
+                await redisClient.expireAt(`token:${token}`, payload.exp);
+            }
         }
 
-        // Decode token
-        const payload = jwt.decode(token);
-
-        // Add to Redis blocklist
-        if (redisClient && payload) {
-            await redisClient.set(`token:${token}`, 'Blocked');
-            await redisClient.expireAt(`token:${token}`, payload.exp);
-        }
-
-        // Clear cookie
+        // Clear cookie with same settings as when it was set
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true, // Always true
+            sameSite: 'none', // Must match the cookie settings
+            path: '/'
         });
 
         res.status(200).json({ 
@@ -215,11 +214,13 @@ const logout = async (req, res) => {
     } catch (err) {
         console.error('Logout Error:', err);
         
+        // Still clear cookie even if there's an error
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true,
+            sameSite: 'none',
+            path: '/'
         });
 
         res.status(200).json({ 
@@ -260,14 +261,16 @@ const adminRegister = async (req, res) => {
         const token = jwt.sign(
             { _id: user._id, emailId: user.emailId, role: user.role },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' }
         );
 
+        // Set cookie with proper options for cross-origin
         res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
+            maxAge: 7 * 24 * 60 * 60 * 1000,
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true,
+            sameSite: 'none',
+            path: '/'
         });
 
         res.status(201).json({ 
@@ -300,13 +303,16 @@ const deleteProfile = async (req, res) => {
             });
         }
 
+        // Delete all submissions by this user
         await Submission.deleteMany({ userId });
 
+        // Clear cookie
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            secure: true,
+            sameSite: 'none',
+            path: '/'
         });
 
         res.status(200).json({ 
@@ -326,5 +332,5 @@ module.exports = {
     logout, 
     adminRegister, 
     deleteProfile,
-    verify // Export new function
+    verify
 };
