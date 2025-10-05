@@ -1,6 +1,6 @@
 // config/redis.js
 const { createClient } = require('redis');
-require('dotenv').config(); // Make sure dotenv is loaded
+require('dotenv').config();
 
 const redisClient = createClient({
     username: process.env.REDIS_USERNAME || 'default',
@@ -11,7 +11,7 @@ const redisClient = createClient({
     }
 });
 
-// Optional: Add error handling and connection logging
+// Error handling
 redisClient.on('error', (err) => {
     console.error('Redis Client Error:', err);
 });
@@ -20,13 +20,7 @@ redisClient.on('connect', () => {
     console.log('✅ Redis Connected Successfully');
 });
 
-// Connect to Redis
-(async () => {
-    try {
-        await redisClient.connect();
-    } catch (err) {
-        console.error('Failed to connect to Redis:', err);
-    }
-})();
+// IMPORTANT: Don't connect here, connect in server.js
+// Remove the auto-connect IIFE
 
 module.exports = redisClient;

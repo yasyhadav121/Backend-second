@@ -1,19 +1,19 @@
 const express = require('express');
 const app = express();
 require('dotenv').config();
-const main = require('./config/db');
+const main = require('../config/db');
 const cookieParser = require('cookie-parser');
-const authRouter = require("./routes/userAuth");
-const redisClient = require('./config/redis');
-const problemRouter = require("./routes/problemCreator");
-const submitRouter = require("./routes/submit");
-const aiRouter = require("./routes/aiChatting");
-const videoRouter = require("./routes/videoCreator");
+const authRouter = require("../routes/userAuth");
+const redisClient = require('../config/redis');
+const problemRouter = require("../routes/problemCreator");
+const submitRouter = require("../routes/submit");
+const aiRouter = require("../routes/aiChatting");
+const videoRouter = require("../routes/videoCreator");
 const cors = require('cors');
 
 // CORS Configuration
 app.use(cors({
-  origin: 'https://front-h1t51hm99-yash-yadavs-projects-0a08703e.vercel.app',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -39,72 +39,51 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Initialize Connections
+// Root route
+app.get('/', (req, res) => {
+  res.json({ message: 'API is running' });
+});
+
+// Initialize connections only once (singleton pattern)
+let isInitialized = false;
+
 const initializeConnection = async () => {
+  if (isInitialized) return;
+  
   try {
-    // Check if Redis is already connected
+    // Connect to MongoDB (reuse existing connections)
+    await main();
+    
+    // Connect to Redis if not already connected
     if (!redisClient.isOpen) {
-      await Promise.all([
-        main(), 
-        redisClient.connect()
-      ]);
-      console.log('✅ MongoDB & Redis Connected');
-    } else {
-      await main();
-      console.log('✅ MongoDB Connected (Redis already connected)');
+      await redisClient.connect();
     }
     
-    // Start Server
-    const server = app.listen(process.env.PORT || 5000, () => {
-      console.log(`🚀 Server listening on port ${process.env.PORT || 5000}`);
-    });
-
-    // Graceful Shutdown
-    const gracefulShutdown = async (signal) => {
-      console.log(`\n${signal} received. Closing gracefully...`);
-      
-      server.close(async () => {
-        console.log('HTTP server closed');
-        
-        try {
-          if (redisClient.isOpen) {
-            await redisClient.quit();
-            console.log('Redis connection closed');
-          }
-          console.log('✅ Graceful shutdown completed');
-          process.exit(0);
-        } catch (err) {
-          console.error('Error during shutdown:', err);
-          process.exit(1);
-        }
-      });
-
-      // Force close after 10 seconds
-      setTimeout(() => {
-        console.error('Could not close connections in time, forcefully shutting down');
-        process.exit(1);
-      }, 10000);
-    };
-
-    // Handle shutdown signals
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
+    isInitialized = true;
+    console.log('✅ Connections initialized');
   } catch (err) {
     console.error('❌ Initialization Error:', err);
-    process.exit(1);
+    throw err;
   }
 };
 
-// Error Handling
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+// Middleware to initialize connections before each request
+app.use(async (req, res, next) => {
+  try {
+    await initializeConnection();
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Database connection failed' });
+  }
 });
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
+// Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error'
+  });
 });
 
-// Start Application
-initializeConnection();
+// Export the Express app as a serverless function
+module.exports = app;

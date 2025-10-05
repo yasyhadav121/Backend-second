@@ -4,7 +4,8 @@
   "description": "",
   "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "vercel-start": "node src/index.js"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,7 @@
   "type": "commonjs",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@upstash/redis": "^1.35.4",
     "axios": "^1.9.0",
     "bcrypt": "^5.1.1",
     "cloudinary": "^2.7.0",

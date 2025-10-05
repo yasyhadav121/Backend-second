@@ -1,6 +1,6 @@
 const validator =require("validator");
 
-// req.body 
+// req.body
 
 const validate = (data)=>{
    

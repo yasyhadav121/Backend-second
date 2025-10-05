@@ -6,8 +6,9 @@ const SolutionVideo = require("../models/solutionVideo")
 
 const createProblem = async (req,res)=>{
    
-  // API request to authenticate user:
-    const {title,description,difficulty,tags,
+  
+    const {
+      title,description,difficulty,tags,
         visibleTestCases,hiddenTestCases,startCode,
         referenceSolution, problemCreator
     } = req.body;
@@ -18,11 +19,7 @@ const createProblem = async (req,res)=>{
       for(const {language,completeCode} of referenceSolution){
          
 
-        // source_code:
-        // language_id:
-        // stdin: 
-        // expectedOutput:
-
+        
         const languageId = getLanguageById(language);
           
         // I am creating Batch submission
