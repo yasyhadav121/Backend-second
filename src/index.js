@@ -13,7 +13,7 @@ const cors = require('cors');
 
 // CORS Configuration
 app.use(cors({
-  origin: 'https://front-end-git-main-yash-yadavs-projects-0a08703e.vercel.app',
+  origin: 'https://front-h1t51hm99-yash-yadavs-projects-0a08703e.vercel.app',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
