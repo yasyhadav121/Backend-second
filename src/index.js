@@ -24,7 +24,13 @@ app.use(cors(corsOptions));
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
-
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    redis: redisClient.isOpen ? 'Connected' : 'Disconnected'
+  });
+});
 // Routes
 app.use('/user', authRouter);
 app.use('/problem', problemRouter);
@@ -33,13 +39,13 @@ app.use('/ai', aiRouter);
 app.use("/video", videoRouter);
 
 // Health Check Route
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'Server is running',
-    redis: redisClient.isOpen ? 'Connected' : 'Disconnected'
-  });
-});
+// app.get('/health', (req, res) => {
+//   res.status(200).json({ 
+//     status: 'OK', 
+//     message: 'Server is running',
+//     redis: redisClient.isOpen ? 'Connected' : 'Disconnected'
+//   });
+// });
 
 // Initialize Connections
 const initializeConnection = async () => {
