@@ -11,7 +11,7 @@ const aiRouter = require("./routes/aiChatting");
 const videoRouter = require("./routes/videoCreator");
 const cors = require('cors');
 
-// CORS Configuration
+// CORS Configuration this also gamee
 const corsOptions = {
   origin: ' http://localhost:5173', // Your exact frontend URL
   credentials: true, // CRITICAL: Allow credentials (cookies)
