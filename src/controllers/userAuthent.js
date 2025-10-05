@@ -15,6 +15,7 @@ const register = async (req, res) => {
         const existingUser = await User.findOne({ emailId });
         if (existingUser) {
             return res.status(400).json({ 
+                success: false,
                 message: "User already exists with this email" 
             });
         }
@@ -33,11 +34,11 @@ const register = async (req, res) => {
         // Create user
         const user = await User.create(userData);
 
-        // Generate token
+        // Generate token with longer expiry for better UX
         const token = jwt.sign(
-            { _id: user._id, emailId: user.emailId, role: 'user' },
+            { _id: user._id, emailId: user.emailId, role: user.role },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' } // Changed from 1h to 7d
         );
 
         // Prepare response
@@ -48,17 +49,21 @@ const register = async (req, res) => {
             role: user.role,
         };
 
-        // Set cookie with proper options
-        res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
-        });
+        // Set cookie only for localhost/development
+        // Vercel pe cookies cross-origin mein kaam nahi karti
+        if (process.env.NODE_ENV !== 'production') {
+            res.cookie('token', token, {
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                httpOnly: true,
+                secure: false,
+                sameSite: 'lax'
+            });
+        }
 
         res.status(201).json({
+            success: true,
             user: reply,
-            token, // Send token in response too for localStorage
+            token, // Frontend localStorage mein save karega
             message: "Registration Successful"
         });
     } catch (err) {
@@ -66,17 +71,20 @@ const register = async (req, res) => {
         
         if (err.name === 'ValidationError') {
             return res.status(400).json({ 
+                success: false,
                 message: err.message 
             });
         }
         
         if (err.code === 11000) {
             return res.status(400).json({ 
+                success: false,
                 message: "Email already exists" 
             });
         }
 
         res.status(400).json({ 
+            success: false,
             message: err.message || "Registration failed" 
         });
     }
@@ -88,11 +96,13 @@ const login = async (req, res) => {
 
         if (!emailId) {
             return res.status(400).json({ 
+                success: false,
                 message: "Email is required" 
             });
         }
         if (!password) {
             return res.status(400).json({ 
+                success: false,
                 message: "Password is required" 
             });
         }
@@ -101,6 +111,7 @@ const login = async (req, res) => {
         const user = await User.findOne({ emailId });
         if (!user) {
             return res.status(401).json({ 
+                success: false,
                 message: "Invalid credentials" 
             });
         }
@@ -109,6 +120,7 @@ const login = async (req, res) => {
         const match = await bcrypt.compare(password, user.password);
         if (!match) {
             return res.status(401).json({ 
+                success: false,
                 message: "Invalid credentials" 
             });
         }
@@ -121,38 +133,42 @@ const login = async (req, res) => {
             role: user.role,
         };
 
-        // Generate token
+        // Generate token with longer expiry
         const token = jwt.sign(
             { _id: user._id, emailId: user.emailId, role: user.role },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' } // Changed from 1h to 7d
         );
 
-        // Set cookie
-        res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
-        });
+        // Set cookie only for development
+        if (process.env.NODE_ENV !== 'production') {
+            res.cookie('token', token, {
+                maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                httpOnly: true,
+                secure: false,
+                sameSite: 'lax'
+            });
+        }
 
         res.status(200).json({
+            success: true,
             user: reply,
-            token, // Send token in response too for localStorage
+            token, // Frontend localStorage mein save karega
             message: "Login Successful"
         });
     } catch (err) {
         console.error('Login Error:', err);
         res.status(500).json({ 
+            success: false,
             message: "Login failed. Please try again" 
         });
     }
 };
 
-// NEW: Verify token endpoint
+// Verify token endpoint - user restore karne ke liye
 const verify = async (req, res) => {
     try {
-        // Token already verified by middleware (authMiddleware)
+        // Token already verified by middleware (userMiddleware)
         // req.result contains the user data from middleware
         
         const user = await User.findById(req.result._id).select('-password');
@@ -184,10 +200,19 @@ const verify = async (req, res) => {
 
 const logout = async (req, res) => {
     try {
-        const { token } = req.cookies;
+        // Token cookie ya Authorization header se lena hai
+        let token = req.cookies?.token;
+        
+        if (!token) {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
 
         if (!token) {
             return res.status(400).json({ 
+                success: false,
                 message: "No token found" 
             });
         }
@@ -197,11 +222,16 @@ const logout = async (req, res) => {
 
         // Add to Redis blocklist
         if (redisClient && payload) {
-            await redisClient.set(`token:${token}`, 'Blocked');
-            await redisClient.expireAt(`token:${token}`, payload.exp);
+            try {
+                await redisClient.set(`token:${token}`, 'Blocked');
+                await redisClient.expireAt(`token:${token}`, payload.exp);
+            } catch (redisErr) {
+                console.error('Redis Error:', redisErr);
+                // Continue with logout even if Redis fails
+            }
         }
 
-        // Clear cookie
+        // Clear cookie (if exists)
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
@@ -210,11 +240,13 @@ const logout = async (req, res) => {
         });
 
         res.status(200).json({ 
+            success: true,
             message: "Logged out successfully" 
         });
     } catch (err) {
         console.error('Logout Error:', err);
         
+        // Clear cookie anyway
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
@@ -223,6 +255,7 @@ const logout = async (req, res) => {
         });
 
         res.status(200).json({ 
+            success: true,
             message: "Logged out successfully" 
         });
     }
@@ -230,8 +263,10 @@ const logout = async (req, res) => {
 
 const adminRegister = async (req, res) => {
     try {
-        if (req.result && req.result.role !== 'admin') {
+        // Check if user is admin
+        if (!req.result || req.result.role !== 'admin') {
             return res.status(403).json({ 
+                success: false,
                 message: "Access denied. Admin only" 
             });
         }
@@ -242,6 +277,7 @@ const adminRegister = async (req, res) => {
         const existingUser = await User.findOne({ emailId });
         if (existingUser) {
             return res.status(400).json({ 
+                success: false,
                 message: "User already exists with this email" 
             });
         }
@@ -260,17 +296,21 @@ const adminRegister = async (req, res) => {
         const token = jwt.sign(
             { _id: user._id, emailId: user.emailId, role: user.role },
             process.env.JWT_KEY,
-            { expiresIn: '1h' }
+            { expiresIn: '7d' }
         );
 
-        res.cookie('token', token, {
-            maxAge: 60 * 60 * 1000,
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
-        });
+        // Set cookie only in development
+        if (process.env.NODE_ENV !== 'production') {
+            res.cookie('token', token, {
+                maxAge: 7 * 24 * 60 * 60 * 1000,
+                httpOnly: true,
+                secure: false,
+                sameSite: 'lax'
+            });
+        }
 
         res.status(201).json({ 
+            success: true,
             message: "User registered successfully",
             user: {
                 firstName: user.firstName,
@@ -283,6 +323,7 @@ const adminRegister = async (req, res) => {
     } catch (err) {
         console.error('Admin Register Error:', err);
         res.status(400).json({ 
+            success: false,
             message: err.message || "Registration failed" 
         });
     }
@@ -296,12 +337,15 @@ const deleteProfile = async (req, res) => {
         
         if (!deletedUser) {
             return res.status(404).json({ 
+                success: false,
                 message: "User not found" 
             });
         }
 
+        // Delete all submissions by this user
         await Submission.deleteMany({ userId });
 
+        // Clear cookie
         res.cookie("token", "", {
             expires: new Date(0),
             httpOnly: true,
@@ -310,11 +354,13 @@ const deleteProfile = async (req, res) => {
         });
 
         res.status(200).json({ 
+            success: true,
             message: "Profile deleted successfully" 
         });
     } catch (err) {
         console.error('Delete Profile Error:', err);
         res.status(500).json({ 
+            success: false,
             message: "Failed to delete profile" 
         });
     }
@@ -326,5 +372,5 @@ module.exports = {
     logout, 
     adminRegister, 
     deleteProfile,
-    verify // Export new function
+    verify
 };
