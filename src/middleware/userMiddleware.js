@@ -8,7 +8,7 @@ const userMiddleware = async (req, res, next) => {
         let token = req.cookies?.token;
         
         // If no cookie, check Authorization header
-        if (!token) {
+        if (!token) { //
             const authHeader = req.headers.authorization;
             if (authHeader && authHeader.startsWith('Bearer ')) {
                 token = authHeader.substring(7);
